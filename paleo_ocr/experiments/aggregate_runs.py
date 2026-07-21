@@ -37,11 +37,27 @@ def main() -> None:
         det_m = _read_json(exp_dir / "metrics_detector.json") if (exp_dir / "metrics_detector.json").exists() else None
         cls_dir = exp_dir / "classifier_run"
         cls_m: Optional[Dict[str, Any]] = None
+        cls_phase: Optional[str] = None
         if cls_dir.is_dir():
-            if (cls_dir / "metrics_best.json").exists():
-                cls_m = _read_json(cls_dir / "metrics_best.json")
-            elif (cls_dir / "metrics_classifier.json").exists():
-                cls_m = _read_json(cls_dir / "metrics_classifier.json")
+            # Prefer the last sequential phase (finetune), then flat legacy layout.
+            phase_dirs = sorted(
+                [d for d in cls_dir.iterdir() if d.is_dir() and d.name.startswith("phase_")],
+                key=lambda d: d.name,
+            )
+            candidates: List[Path] = []
+            for d in reversed(phase_dirs):
+                candidates.append(d / "metrics_best.json")
+            candidates.extend(
+                [
+                    cls_dir / "metrics_best.json",
+                    cls_dir / "metrics_classifier.json",
+                ]
+            )
+            for cand in candidates:
+                cls_m = _read_json(cand)
+                if cls_m is not None:
+                    cls_phase = cand.parent.name if cand.parent != cls_dir else "flat"
+                    break
 
         row: Dict[str, Any] = {"experiment_dir": str(exp_dir.name)}
         if cfg:
@@ -60,16 +76,19 @@ def main() -> None:
             row["map50"] = det_m.get("mAP50")
             row["map50_95"] = det_m.get("mAP50_95")
         if cls_m:
+            row["classifier_phase"] = cls_phase
             ma = cls_m.get("metrics_all") or {}
             if ma:
                 row["val_acc1"] = cls_m.get("val_acc1")
                 row["macro_f1"] = ma.get("macro_f1")
                 row["weighted_f1"] = ma.get("weighted_f1")
+                row["best_epoch"] = cls_m.get("epoch")
             else:
                 # Standalone eval_classifier output (metrics_classifier.json): flat keys
                 row["val_acc1"] = cls_m.get("val_acc1")
                 row["macro_f1"] = cls_m.get("macro_f1")
                 row["weighted_f1"] = cls_m.get("weighted_f1")
+                row["best_epoch"] = cls_m.get("epoch")
         rows.append(row)
 
     if not rows:
