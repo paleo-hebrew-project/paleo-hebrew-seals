@@ -1,0 +1,291 @@
+"""style_adapt
+===========
+
+Style-adaptation module: turn *clean renders* into *artifact-like photos*.
+
+Two levels
+----------
+A) Classic (no diffusion) — fast, deterministic-ish:
+   - paper/stone texture blending
+   - shading/relighting (vignette, directional light)
+   - blur, noise, JPEG, chromatic aberration
+   - erosion/dilation to mimic ink wear
+
+B) Diffusion-based (optional) — better domain match:
+   - ControlNet (e.g., tile / canny / scribble) conditioned on the clean render
+   - IP-Adapter for style reference (a few real seal photos)
+   - Optional LoRA fine-tune on seal textures
+
+This file provides a working Classic pipeline, and a *pluggable* Diffusion
+pipeline scaffold.
+
+Why scaffold?
+-------------
+Diffusion dependencies vary (diffusers version, ControlNet checkpoints, IP-Adapter
+weights). We keep the interface stable:
+
+  style_adapt.py classic ...
+  style_adapt.py diffusion ...
+
+and the diffusion path will raise a clear error if dependencies/models missing.
+
+Inputs
+------
+- manifest.jsonl from synthetic_v2_generator (clean renders)
+- optionally: style_refs/ folder with real seal images
+
+Outputs
+-------
+- out_root/images/<uid>.png (stylized)
+- out_root/manifest.jsonl (copied GT + bboxes, but note: if you do geometric warp,
+  you must transform bboxes; we keep classic transforms bbox-safe by default)
+
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import random
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
+
+try:
+    from PIL import Image, ImageEnhance, ImageFilter
+except Exception as e:
+    raise RuntimeError("Pillow is required: pip install pillow") from e
+
+
+# -------------------------
+# I/O
+# -------------------------
+
+
+def _read_jsonl(path: Path) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            out.append(json.loads(line))
+    return out
+
+
+def _write_jsonl(path: Path, rows: List[Dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+
+# -------------------------
+# Classic style transforms
+# -------------------------
+
+
+def _to_np(im: Image.Image) -> np.ndarray:
+    return np.array(im).astype(np.float32)
+
+
+def _to_img(arr: np.ndarray) -> Image.Image:
+    arr = np.clip(arr, 0, 255).astype(np.uint8)
+    return Image.fromarray(arr, mode="RGB")
+
+
+def random_texture(width: int, height: int, strength: float = 0.35) -> np.ndarray:
+    """Generate a simple procedural texture (Perlin-ish via blurred noise)."""
+    base = np.random.normal(0, 1.0, size=(height, width, 1)).astype(np.float32)
+    # blur by repeated box filters
+    for _ in range(6):
+        base = (np.pad(base, ((1,1),(1,1),(0,0)), mode="reflect")[:-2,1:-1] +
+                np.pad(base, ((1,1),(1,1),(0,0)), mode="reflect")[2:,1:-1] +
+                np.pad(base, ((1,1),(1,1),(0,0)), mode="reflect")[1:-1,:-2] +
+                np.pad(base, ((1,1),(1,1),(0,0)), mode="reflect")[1:-1,2:] +
+                4*np.pad(base, ((1,1),(1,1),(0,0)), mode="reflect")[1:-1,1:-1]) / 8.0
+    tex = base * 255.0 * float(strength)
+    tex = np.repeat(tex, 3, axis=2)
+    return tex
+
+
+def apply_vignette(arr: np.ndarray, strength: float = 0.35) -> np.ndarray:
+    h, w, _ = arr.shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    cx, cy = w/2, h/2
+    r = np.sqrt((xx - cx)**2 + (yy - cy)**2)
+    r = r / r.max()
+    mask = 1.0 - float(strength) * (r**1.7)
+    return arr * mask[..., None]
+
+
+def directional_shading(arr: np.ndarray, strength: float = 0.25) -> np.ndarray:
+    h, w, _ = arr.shape
+    angle = random.uniform(0, 2*np.pi)
+    dx, dy = np.cos(angle), np.sin(angle)
+    yy, xx = np.mgrid[0:h, 0:w]
+    proj = (xx * dx + yy * dy)
+    proj = (proj - proj.min()) / max(1e-6, proj.max() - proj.min())
+    shade = 1.0 - float(strength) * (proj - 0.5)
+    return arr * shade[..., None]
+
+
+def jpeg_artifact(im: Image.Image, quality: int = 60) -> Image.Image:
+    import io
+    buf = io.BytesIO()
+    im.save(buf, format="JPEG", quality=int(quality))
+    buf.seek(0)
+    return Image.open(buf).convert("RGB")
+
+
+def classic_style(im: Image.Image, seed: Optional[int] = None) -> Image.Image:
+    if seed is not None:
+        random.seed(seed)
+        np.random.seed(seed)
+
+    arr = _to_np(im)
+    h, w, _ = arr.shape
+
+    # Blend with texture
+    tex = random_texture(w, h, strength=random.uniform(0.15, 0.5))
+    arr = np.clip(arr + tex, 0, 255)
+
+    # Shading + vignette
+    arr = directional_shading(arr, strength=random.uniform(0.10, 0.35))
+    arr = apply_vignette(arr, strength=random.uniform(0.10, 0.45))
+
+    # Contrast/brightness jitter
+    out = _to_img(arr)
+    out = ImageEnhance.Contrast(out).enhance(random.uniform(0.85, 1.25))
+    out = ImageEnhance.Brightness(out).enhance(random.uniform(0.85, 1.15))
+
+    # Blur (mild)
+    if random.random() < 0.7:
+        out = out.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.0, 1.2)))
+
+    # Add sensor noise
+    arr = _to_np(out)
+    noise = np.random.normal(0, random.uniform(2.0, 10.0), size=arr.shape).astype(np.float32)
+    arr = np.clip(arr + noise, 0, 255)
+
+    # Optional JPEG artifacts
+    out = _to_img(arr)
+    if random.random() < 0.35:
+        out = jpeg_artifact(out, quality=random.randint(35, 85))
+
+    return out
+
+
+# -------------------------
+# Diffusion scaffold
+# -------------------------
+
+
+def diffusion_style(
+    im: Image.Image,
+    prompt: str,
+    negative_prompt: str = "",
+    controlnet: str = "canny",
+    style_ref: Optional[Image.Image] = None,
+    seed: Optional[int] = None,
+    steps: int = 30,
+    guidance: float = 5.0,
+) -> Image.Image:
+    """Stylize with diffusers + ControlNet + (optional) IP-Adapter.
+
+    This is a scaffold; it requires you to provide model identifiers/paths.
+    We intentionally don't hardcode checkpoints.
+    """
+
+    try:
+        import torch
+        from diffusers import StableDiffusionXLControlNetPipeline, ControlNetModel
+        from diffusers.utils import load_image
+    except Exception as e:
+        raise RuntimeError(
+            "Diffusion path requires diffusers + torch. Install: pip install diffusers accelerate safetensors"
+        ) from e
+
+    raise RuntimeError(
+        "Diffusion stylization scaffold is present, but you must wire in specific model checkpoints "
+        "(SDXL base + ControlNet + optional IP-Adapter/LoRA). Use classic mode for now."
+    )
+
+
+# -------------------------
+# CLI
+# -------------------------
+
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Style adaptation for synthetic renders.")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    p_cls = sub.add_parser("classic", help="Fast classic style pipeline")
+    p_cls.add_argument("--manifest", type=str, required=True)
+    p_cls.add_argument("--out", type=str, required=True)
+    p_cls.add_argument("--seed", type=int, default=42)
+    p_cls.add_argument("--max-items", type=int, default=None)
+
+    p_diff = sub.add_parser("diffusion", help="Diffusion style pipeline (scaffold)")
+    p_diff.add_argument("--manifest", type=str, required=True)
+    p_diff.add_argument("--out", type=str, required=True)
+    p_diff.add_argument("--prompt", type=str, required=True)
+    p_diff.add_argument("--negative", type=str, default="")
+
+    return p.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+
+    in_rows = _read_jsonl(Path(args.manifest))
+    if args.max_items:
+        in_rows = in_rows[: int(args.max_items)]
+
+    out_root = Path(args.out)
+    out_root.mkdir(parents=True, exist_ok=True)
+    (out_root / "images").mkdir(parents=True, exist_ok=True)
+
+    out_rows: List[Dict[str, Any]] = []
+
+    if args.cmd == "classic":
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+
+        for r in in_rows:
+            uid = r.get("uid")
+            img = r.get("image", {})
+            src = img.get("abs_path")
+            if not uid or not src:
+                continue
+
+            im = Image.open(src).convert("RGB")
+            out_im = classic_style(im)
+
+            out_path = out_root / "images" / f"{uid}.png"
+            out_im.save(out_path)
+
+            # copy record but update paths
+            rr = dict(r)
+            rr["image"] = dict(img)
+            rr["image"]["abs_path"] = str(out_path.resolve())
+            rr["image"]["rel_path"] = f"images/{uid}.png"
+
+            # note: geometry-preserving, so bboxes unchanged
+            rr.setdefault("meta", {})
+            rr["meta"]["style"] = {"method": "classic"}
+
+            out_rows.append(rr)
+
+        _write_jsonl(out_root / "manifest.jsonl", out_rows)
+        print(f"[style_adapt classic] wrote {len(out_rows)} images to {out_root}")
+
+    elif args.cmd == "diffusion":
+        raise RuntimeError("Diffusion mode scaffold only; wire your checkpoints first.")
+
+
+if __name__ == "__main__":
+    main()

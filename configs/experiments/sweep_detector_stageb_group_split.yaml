@@ -1,0 +1,85 @@
+# Same two-phase schedule as sweep_detector_stageb_base.yaml, but the real source and val manifest
+# point to manifest_hebrew_unambiguous_group_split_rowid.jsonl with train/validation filters.
+#
+# Launch phase 1 only (from repo root; логи under DETECTOR_SWEEP_LOG_DIR):
+#   DETECTOR_SWEEP_LOG_DIR=logs/detector_phase1_group_split \
+#   DETECTOR_BASE_CONFIG=configs/experiments/sweep_detector_stageb_group_split.yaml \
+#   DETECTOR_GPUS="0 1 2 3 4 5 6 7" \
+#     bash scripts/run_parallel_detector_sweep_phase1.sh
+#
+# Full two-phase sweep:
+#   DETECTOR_SWEEP_LOG_DIR=logs/detector_sweep_group_split \
+#   DETECTOR_BASE_CONFIG=configs/experiments/sweep_detector_stageb_group_split.yaml \
+#   DETECTOR_GPUS="0 1 2 3 4 5 6 7" \
+#     bash scripts/run_parallel_detector_sweep.sh
+experiment_name: det_sweep_seq_real_strongaug_group_split
+seed: 42
+task: detector
+output_root: runs/paleo_experiments
+
+data:
+  val_manifest: notebooks/manifest_hebrew_unambiguous_group_split_rowid.jsonl
+  real_source_id: real
+  synth_stage_a_id: synth_stage_a
+  synth_stage_b_id: synth_stage_b
+  sources:
+    - id: real
+      path: notebooks/manifest_hebrew_unambiguous_group_split_rowid.jsonl
+    - id: synth_stage_a
+      path: runs/synthetic_v2_parallel_advanced_20260222/all_manifest.jsonl
+    - id: synth_stage_b
+      path: notebooks/syn_v2_styled_advanced_20260222/manifest.jsonl
+
+mixing:
+  mode: sequential
+
+phases:
+  - name: pretrain_synth
+    source_ids: [synth_stage_b]
+    epochs: 10
+    lr: 0.005
+    train_overrides:
+      patience: 0
+      close_mosaic: 10
+  - name: finetune_real
+    source_ids: [real]
+    epochs: 90
+    lr: 0.005
+    train_overrides:
+      patience: 15
+      # 0 = never run Ultralytics "Closing dataloader mosaic" (keep mosaic until last epoch).
+      close_mosaic: 0
+
+detector:
+  model: yolov8n.pt
+  epochs: 100
+  imgsz: 640
+  batch: 128
+  device: "0"
+  workers: 16
+  project: runs/detect
+  run_name: sweep_seq_real_strongaug_group_split
+  use_symlinks: true
+  shared_dataset_cache: true
+  shared_dataset_cache_root: runs/paleo_experiments/_shared_yolo_cache
+  single_class: true
+  regime: synth_train_real_val
+  train_split_filter: train
+  val_split_filter: validation
+  train_overrides:
+    optimizer: AdamW
+    cos_lr: true
+    mosaic: 0.4
+    mixup: 0.0
+    close_mosaic: 10
+    degrees: 3.0
+    translate: 0.05
+    scale: 0.4
+    shear: 2.0
+    perspective: 0.0005
+    fliplr: 0.35
+    flipud: 0.0
+    auto_augment: randaugment
+    erasing: 0.0
+
+notes: "Stage-B two-phase sweep with group-split real val/train (same JSONL + split filters)."

@@ -1,0 +1,34 @@
+experiment_name: det_yolo_weighted_real_synthb
+seed: 42
+task: detector
+output_root: runs/paleo_experiments
+
+data:
+  val_manifest: notebooks/manifest_hebrew_unambiguous.jsonl
+  real_source_id: real
+  synth_stage_a_id: synth_stage_a
+  synth_stage_b_id: synth_stage_b
+  sources:
+    - id: real
+      path: notebooks/manifest_hebrew_unambiguous.jsonl
+    - id: synth_stage_a
+      path: runs/synthetic_v2_parallel_advanced_20260222/all_manifest.jsonl
+    - id: synth_stage_b
+      path: notebooks/syn_v2_styled_advanced_20260222/manifest.jsonl
+
+mixing:
+  mode: weighted
+  weights:
+    synth_stage_b: 1.0
+    real: 0.3
+
+detector:
+  model: yolov8n.pt
+  epochs: 2
+  imgsz: 640
+  batch: 8
+  device: "0"
+  workers: 4
+  project: runs/detect
+  run_name: yolo_weighted
+  regime: synth_train_real_val

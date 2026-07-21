@@ -1,0 +1,39 @@
+# Real-only classifier backbone sweep base on the backup row_id-group split.
+# Train ONLY on the real source for 40 epochs; no synth stage.
+experiment_name: cls_sweep_real_only_40e_base_group_split
+seed: 42
+task: classifier
+output_root: runs/paleo_experiments
+
+data:
+  val_manifest: notebooks/manifest_hebrew_unambiguous_group_split_rowid.jsonl
+  real_source_id: real
+  sources:
+    - id: real
+      path: notebooks/manifest_hebrew_unambiguous_group_split_rowid.jsonl
+
+mixing:
+  mode: single
+
+classifier:
+  model: convnext_base
+  epochs: 40
+  imgsz: 224
+  batch: 256
+  lr: 0.0003
+  wd: 0.05
+  amp: true
+  best_metric: val_acc1
+  topk: 3
+  transform_style: notebook
+  label_smoothing: 0.05
+  warmup_epochs: 1.0
+  cosine_schedule: true
+  freeze_backbone_epochs: 1
+  train_split_filter: train
+  val_split_filter: validation
+  num_workers: 8
+  prefetch_factor: 8
+  drop_last: true
+
+notes: "Classifier sweep baseline on backup row_id-group split: 40 epochs on real data only."

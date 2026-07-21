@@ -1,0 +1,57 @@
+# Base config for timm classifier backbone sweeps (override --classifier-model from CLI).
+# Two-phase regime on the backup group split: synth pretrain -> real finetune.
+# Uses the row_id-grouped manifest so train and validation do not share the same inscription/object.
+experiment_name: cls_sweep_stageb_base_group_split
+seed: 42
+task: classifier
+output_root: runs/paleo_experiments
+
+data:
+  val_manifest: notebooks/manifest_hebrew_unambiguous_group_split_rowid.jsonl
+  real_source_id: real
+  synth_stage_a_id: synth_stage_a
+  synth_stage_b_id: synth_stage_b
+  sources:
+    - id: real
+      path: notebooks/manifest_hebrew_unambiguous_group_split_rowid.jsonl
+    - id: synth_stage_a
+      path: runs/synthetic_v2_parallel_advanced_20260222/all_manifest.jsonl
+    - id: synth_stage_b
+      path: notebooks/syn_v2_styled_advanced_20260222/manifest.jsonl
+
+mixing:
+  mode: sequential
+
+phases:
+  - name: pretrain_synth
+    source_ids: [synth_stage_b]
+    epochs: 20
+    lr: 0.0003
+  - name: finetune_real
+    source_ids: [real]
+    epochs: 120
+    lr: 0.0001
+
+classifier:
+  model: convnext_base
+  # Ignored when mixing.mode is sequential (see phases above). Kept = sum(phase epochs) for clarity.
+  epochs: 140
+  imgsz: 224
+  batch: 256
+  lr: 0.0003
+  wd: 0.05
+  amp: true
+  best_metric: val_acc1
+  topk: 3
+  transform_style: notebook
+  label_smoothing: 0.05
+  warmup_epochs: 1.0
+  cosine_schedule: true
+  freeze_backbone_epochs: 1
+  train_split_filter: train
+  val_split_filter: validation
+  num_workers: 8
+  prefetch_factor: 8
+  drop_last: true
+
+notes: "Sequential classifier sweep on backup row_id-group split: 20 epochs synth_stage_b pretrain, then 60 epochs real finetune."

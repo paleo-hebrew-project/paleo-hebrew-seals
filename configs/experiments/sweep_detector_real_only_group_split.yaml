@@ -1,0 +1,64 @@
+# Same as sweep_detector_real_only_100e_base.yaml but train/val come from the Hebrew
+# unambiguous group-split manifest (one JSONL, row-level split labels).
+#
+# Launch (from repo root; логи: per-job *.log + jobs.tsv under DETECTOR_SWEEP_LOG_DIR):
+#   DETECTOR_SWEEP_LOG_DIR=logs/detector_real_only_group_split \
+#   DETECTOR_BASE_CONFIG=configs/experiments/sweep_detector_real_only_group_split.yaml \
+#   DETECTOR_GPUS="0 1 2 3 4 5 6 7" \
+#     bash scripts/run_parallel_detector_sweep_real_only.sh
+#   RT-DETR (*.yaml): use sweep_detector_real_only_group_split_rtdetr.yaml (lower lr0, amp off).
+#   DETECTOR_SWEEP_LOG_DIR=logs/detector_real_only_non_yolo_group_split \
+#   DETECTOR_BASE_CONFIG=configs/experiments/sweep_detector_real_only_group_split_rtdetr.yaml \
+#   DETECTOR_GPUS="0 1 2 3" \
+#     bash scripts/run_parallel_detector_sweep_real_only_non_yolo.sh
+#
+# Rows need rec["split"] in {train, validation}; YOLO export skips empty gt.bboxes (same as other manifests).
+experiment_name: det_sweep_real_only_group_split_100e
+seed: 42
+task: detector
+output_root: runs/paleo_experiments
+
+data:
+  val_manifest: notebooks/manifest_hebrew_unambiguous_group_split_rowid.jsonl
+  real_source_id: real
+  sources:
+    - id: real
+      path: notebooks/manifest_hebrew_unambiguous_group_split_rowid.jsonl
+
+mixing:
+  mode: single
+
+detector:
+  model: yolov8n.pt
+  epochs: 100
+  imgsz: 640
+  batch: 32
+  device: "0"
+  workers: 16
+  project: runs/detect
+  run_name: sweep_real_only_group_split_100e
+  use_symlinks: true
+  shared_dataset_cache: true
+  shared_dataset_cache_root: runs/paleo_experiments/_shared_yolo_cache
+  single_class: true
+  regime: real_only
+  train_split_filter: train
+  val_split_filter: validation
+  train_overrides:
+    optimizer: AdamW
+    cos_lr: true
+    patience: 0
+    mosaic: 0.4
+    mixup: 0.0
+    close_mosaic: 20
+    degrees: 3.0
+    translate: 0.05
+    scale: 0.4
+    shear: 2.0
+    perspective: 0.0005
+    fliplr: 0.35
+    flipud: 0.0
+    auto_augment: randaugment
+    erasing: 0.0
+
+notes: "Real-only detector sweep on group-split manifest; single file + split filters."

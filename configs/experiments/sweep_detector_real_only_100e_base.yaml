@@ -1,0 +1,62 @@
+# Real-only detector sweep base: train on the real train subset only, validate on the held-out real val subset.
+# Use with:
+#   python -m paleo_ocr.experiments.run_experiment --config ... --detector-model <model>
+# or any sweep shell script via DETECTOR_BASE_CONFIG=...
+#
+# This config intentionally skips the synth stage entirely:
+#   - mixing.mode: single
+#   - detector.regime: real_only
+#   - no phases block
+#
+# Compatible with both YOLO-like detector checkpoints and the official Ultralytics RT-DETR family,
+# including rtdetr-resnet50.yaml / rtdetr-resnet101.yaml.
+experiment_name: det_sweep_real_only_100e
+seed: 42
+task: detector
+output_root: runs/paleo_experiments
+
+data:
+  # Explicit held-out real validation subset.
+  val_manifest: notebooks/paleo_ocr_part2/yolo_22_from_val_split_singlecls/manifest_val.jsonl
+  real_source_id: real
+  sources:
+    - id: real
+      path: notebooks/paleo_ocr_part2/yolo_22_from_val_split_singlecls/manifest_train.jsonl
+
+mixing:
+  mode: single
+
+detector:
+  model: yolov8n.pt
+  epochs: 100
+  imgsz: 640
+  # Conservative cross-family batch for H100-class runs; lower this for very large models if needed.
+  batch: 32
+  device: "0"
+  workers: 16
+  project: runs/detect
+  run_name: sweep_real_only_100e
+  use_symlinks: true
+  shared_dataset_cache: true
+  shared_dataset_cache_root: runs/paleo_experiments/_shared_yolo_cache
+  single_class: true
+  regime: real_only
+  train_overrides:
+    optimizer: AdamW
+    cos_lr: true
+    # Keep early stopping off so the schedule actually runs the full 100 epochs.
+    patience: 0
+    mosaic: 0.4
+    mixup: 0.0
+    close_mosaic: 20
+    degrees: 3.0
+    translate: 0.05
+    scale: 0.4
+    shear: 2.0
+    perspective: 0.0005
+    fliplr: 0.35
+    flipud: 0.0
+    auto_augment: randaugment
+    erasing: 0.0
+
+notes: "Detector sweep baseline on real subset only: 100 epochs, no synth pretrain, shared YOLO export cache enabled."

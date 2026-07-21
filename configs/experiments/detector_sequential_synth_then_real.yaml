@@ -1,0 +1,57 @@
+experiment_name: det_seq_synthb_then_real_strongaug
+seed: 42
+task: detector
+output_root: runs/paleo_experiments
+
+data:
+  # Keep real train/val strictly separated (as in notebook train8/train9 flow).
+  val_manifest: notebooks/paleo_ocr_part2/yolo_22_from_val_split_singlecls/manifest_val.jsonl
+  real_source_id: real
+  synth_stage_a_id: synth_stage_a
+  synth_stage_b_id: synth_stage_b
+  sources:
+    - id: real
+      path: notebooks/paleo_ocr_part2/yolo_22_from_val_split_singlecls/manifest_train.jsonl
+    - id: synth_stage_a
+      path: runs/synthetic_v2_parallel_advanced_20260222/all_manifest.jsonl
+    - id: synth_stage_b
+      path: notebooks/syn_v2_styled_advanced_20260222/manifest.jsonl
+
+mixing:
+  mode: sequential
+
+phases:
+  - name: pretrain_synth
+    source_ids: [synth_stage_b]
+    epochs: 40
+    lr: 0.002
+  - name: finetune_real
+    source_ids: [real]
+    epochs: 60
+    lr: 0.001
+
+detector:
+  model: yolov8n.pt
+  imgsz: 640
+  batch: 16
+  device: "0"
+  workers: 4
+  project: runs/detect
+  run_name: seq_synthb_real_strongaug
+  regime: synth_train_real_val
+  train_overrides:
+    optimizer: AdamW
+    cos_lr: true
+    patience: 20
+    mosaic: 0.4
+    mixup: 0.0
+    translate: 0.05
+    scale: 0.4
+    close_mosaic: 10
+    degrees: 3.0
+    shear: 2.0
+    perspective: 0.0005
+    fliplr: 0.35
+    flipud: 0.0
+    auto_augment: randaugment
+    erasing: 0.0

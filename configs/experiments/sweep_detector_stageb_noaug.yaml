@@ -1,0 +1,72 @@
+# Detector backbone sweep base (no augmentation).
+# Control arm for augmentation ablation.
+# Sequential: phase lengths from phases[].epochs; detector.epochs = sum for non-sequential fallback.
+
+experiment_name: det_sweep_seq_real_noaug
+seed: 42
+task: detector
+output_root: runs/paleo_experiments
+
+data:
+  val_manifest: notebooks/paleo_ocr_part2/yolo_22_from_val_split_singlecls/manifest_val.jsonl
+  real_source_id: real
+  synth_stage_a_id: synth_stage_a
+  synth_stage_b_id: synth_stage_b
+  sources:
+    - id: real
+      path: notebooks/paleo_ocr_part2/yolo_22_from_val_split_singlecls/manifest_train.jsonl
+    - id: synth_stage_a
+      path: runs/synthetic_v2_parallel_advanced_20260222/all_manifest.jsonl
+    - id: synth_stage_b
+      path: notebooks/syn_v2_styled_advanced_20260222/manifest.jsonl
+
+mixing:
+  mode: sequential
+
+phases:
+  - name: pretrain_synth
+    source_ids: [synth_stage_b]
+    epochs: 10
+    lr: 0.005
+    train_overrides:
+      patience: 0
+      close_mosaic: 0
+  - name: finetune_real
+    source_ids: [real]
+    epochs: 40
+    lr: 0.005
+    train_overrides:
+      patience: 15
+      close_mosaic: 0
+
+detector:
+  model: yolov8n.pt
+  epochs: 50
+  imgsz: 640
+  batch: 16
+  device: "0"
+  workers: 4
+  project: runs/detect
+  run_name: sweep_seq_real_noaug
+  use_symlinks: true
+  single_class: true
+  regime: synth_train_real_val
+  train_overrides:
+    optimizer: AdamW
+    cos_lr: true
+    mosaic: 0.0
+    mixup: 0.0
+    close_mosaic: 0
+    degrees: 0.0
+    translate: 0.0
+    scale: 0.0
+    shear: 0.0
+    perspective: 0.0
+    fliplr: 0.0
+    flipud: 0.0
+    hsv_h: 0.0
+    hsv_s: 0.0
+    hsv_v: 0.0
+    erasing: 0.0
+
+notes: "Augmentation ablation control: no geometric/color augmentation. Per-phase patience."

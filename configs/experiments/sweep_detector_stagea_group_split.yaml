@@ -1,0 +1,73 @@
+# Stage-A detector ablation on the row_id group split.
+# Mirrors sweep_detector_stageb_group_split.yaml and changes only the synthetic phase source.
+experiment_name: det_sweep_stagea_seq_real_strongaug_group_split
+seed: 42
+task: detector
+output_root: runs/paleo_experiments
+
+data:
+  val_manifest: notebooks/manifest_hebrew_unambiguous_group_split_rowid.jsonl
+  real_source_id: real
+  synth_stage_a_id: synth_stage_a
+  synth_stage_b_id: synth_stage_b
+  sources:
+    - id: real
+      path: notebooks/manifest_hebrew_unambiguous_group_split_rowid.jsonl
+    - id: synth_stage_a
+      path: runs/synthetic_v2_parallel_advanced_20260222/all_manifest.jsonl
+    - id: synth_stage_b
+      path: notebooks/syn_v2_styled_advanced_20260222/manifest.jsonl
+
+mixing:
+  mode: sequential
+
+phases:
+  - name: pretrain_stagea
+    source_ids: [synth_stage_a]
+    epochs: 10
+    lr: 0.005
+    train_overrides:
+      patience: 0
+      close_mosaic: 10
+  - name: finetune_real
+    source_ids: [real]
+    epochs: 90
+    lr: 0.005
+    train_overrides:
+      patience: 15
+      # 0 = never run Ultralytics "Closing dataloader mosaic" (keep mosaic until last epoch).
+      close_mosaic: 0
+
+detector:
+  model: yolov8n.pt
+  epochs: 100
+  imgsz: 640
+  batch: 128
+  device: "0"
+  workers: 16
+  project: runs/detect
+  run_name: sweep_stagea_seq_real_strongaug_group_split
+  use_symlinks: true
+  shared_dataset_cache: true
+  shared_dataset_cache_root: runs/paleo_experiments/_shared_yolo_cache
+  single_class: true
+  regime: synth_train_real_val
+  train_split_filter: train
+  val_split_filter: validation
+  train_overrides:
+    optimizer: AdamW
+    cos_lr: true
+    mosaic: 0.4
+    mixup: 0.0
+    close_mosaic: 10
+    degrees: 3.0
+    translate: 0.05
+    scale: 0.4
+    shear: 2.0
+    perspective: 0.0005
+    fliplr: 0.35
+    flipud: 0.0
+    auto_augment: randaugment
+    erasing: 0.0
+
+notes: "Stage-A detector ablation with row_id-group real split: structural synth pretrain, then real finetune."

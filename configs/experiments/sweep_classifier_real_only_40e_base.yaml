@@ -1,0 +1,41 @@
+# Real-only classifier backbone sweep base (override --classifier-model from CLI).
+# Train ONLY on the real source for 40 epochs; use with CLASSIFIER_REGIME=real_only
+# or `python -m paleo_ocr.experiments.run_experiment --config ... --regime real_only`.
+# Unique experiment_name avoids conflicts with the sequential 20 synth + 20 real sweep.
+experiment_name: cls_sweep_real_only_40e_base
+seed: 42
+task: classifier
+output_root: runs/paleo_experiments
+
+data:
+  val_manifest: notebooks/manifest_hebrew_unambiguous.jsonl
+  real_source_id: real
+  sources:
+    - id: real
+      path: notebooks/manifest_hebrew_unambiguous.jsonl
+
+mixing:
+  mode: single
+
+classifier:
+  model: convnext_base
+  epochs: 40
+  imgsz: 224
+  batch: 256
+  lr: 0.0003
+  wd: 0.05
+  amp: true
+  best_metric: val_acc1
+  topk: 3
+  transform_style: notebook
+  label_smoothing: 0.05
+  warmup_epochs: 1.0
+  cosine_schedule: true
+  freeze_backbone_epochs: 1
+  train_split_filter: train
+  val_split_filter: validation
+  num_workers: 8
+  prefetch_factor: 8
+  drop_last: true
+
+notes: "Classifier sweep baseline on real data only: 40 epochs from pretrained timm weights, no synth stage."

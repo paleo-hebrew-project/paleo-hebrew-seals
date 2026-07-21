@@ -1,0 +1,1 @@
+experiment_dir,task,experiment_name,seed,mixing_mode,detector_model,detector_regime,classifier_model,map50,map50_95,macro_f1,weighted_f1,val_acc1,real_samples_seen,synth_samples_seen,optimizer_steps,wall_time_s,notes

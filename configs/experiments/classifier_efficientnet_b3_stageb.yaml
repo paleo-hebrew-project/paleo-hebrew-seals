@@ -1,0 +1,31 @@
+experiment_name: cls_efficientnet_b3_stageb_valreal
+seed: 42
+task: classifier
+output_root: runs/paleo_experiments
+
+data:
+  val_manifest: notebooks/manifest_hebrew_unambiguous.jsonl
+  real_source_id: real
+  synth_stage_a_id: synth_stage_a
+  synth_stage_b_id: synth_stage_b
+  sources:
+    - id: real
+      path: notebooks/manifest_hebrew_unambiguous.jsonl
+    - id: synth_stage_a
+      path: runs/synthetic_v2_parallel_advanced_20260222/all_manifest.jsonl
+    - id: synth_stage_b
+      path: notebooks/syn_v2_styled_advanced_20260222/manifest.jsonl
+
+mixing:
+  mode: single
+
+classifier:
+  model: tf_efficientnet_b3_ns
+  epochs: 20
+  imgsz: 300
+  batch: 256
+  lr: 0.0003
+  wd: 0.0001
+  amp: false
+  best_metric: macro_f1
+  topk: 5

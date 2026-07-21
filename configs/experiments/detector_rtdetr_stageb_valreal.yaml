@@ -1,0 +1,34 @@
+# RT-DETR (transformer detector) — same Ultralytics API as YOLO; good parallel experiment vs CNN YOLO.
+experiment_name: det_rtdetr_l_stageb_valreal
+seed: 42
+task: detector
+output_root: runs/paleo_experiments
+
+data:
+  val_manifest: notebooks/manifest_hebrew_unambiguous.jsonl
+  real_source_id: real
+  synth_stage_a_id: synth_stage_a
+  synth_stage_b_id: synth_stage_b
+  sources:
+    - id: real
+      path: notebooks/manifest_hebrew_unambiguous.jsonl
+    - id: synth_stage_a
+      path: runs/synthetic_v2_parallel_advanced_20260222/all_manifest.jsonl
+    - id: synth_stage_b
+      path: notebooks/syn_v2_styled_advanced_20260222/manifest.jsonl
+
+mixing:
+  mode: single
+
+detector:
+  model: rtdetr-l.pt
+  epochs: 2
+  imgsz: 640
+  batch: 4
+  device: "0"
+  workers: 4
+  project: runs/detect
+  run_name: rtdetr_l_stageb_valreal
+  use_symlinks: true
+  single_class: true
+  regime: synth_train_real_val

@@ -1,0 +1,56 @@
+# Stage-A ablation for timm classifier backbone sweeps.
+# Same split, schedule, and classifier hyperparameters as sweep_classifier_stageb_base.yaml,
+# but phase 0 uses structural Stage A synthetic crops instead of Stage B styled crops.
+experiment_name: cls_sweep_stagea_base
+seed: 42
+task: classifier
+output_root: runs/paleo_experiments
+
+data:
+  val_manifest: notebooks/manifest_hebrew_unambiguous.jsonl
+  real_source_id: real
+  synth_stage_a_id: synth_stage_a
+  synth_stage_b_id: synth_stage_b
+  sources:
+    - id: real
+      path: notebooks/manifest_hebrew_unambiguous.jsonl
+    - id: synth_stage_a
+      path: runs/synthetic_v2_parallel_advanced_20260222/all_manifest.jsonl
+    - id: synth_stage_b
+      path: notebooks/syn_v2_styled_advanced_20260222/manifest.jsonl
+
+mixing:
+  mode: sequential
+
+phases:
+  - name: pretrain_stagea
+    source_ids: [synth_stage_a]
+    epochs: 20
+    lr: 0.0003
+  - name: finetune_real
+    source_ids: [real]
+    epochs: 120
+    lr: 0.0001
+
+classifier:
+  model: convnext_base
+  epochs: 140
+  imgsz: 224
+  batch: 256
+  lr: 0.0003
+  wd: 0.05
+  amp: true
+  best_metric: val_acc1
+  topk: 3
+  transform_style: notebook
+  label_smoothing: 0.05
+  warmup_epochs: 1.0
+  cosine_schedule: true
+  freeze_backbone_epochs: 1
+  train_split_filter: train
+  val_split_filter: validation
+  num_workers: 8
+  prefetch_factor: 8
+  drop_last: true
+
+notes: "Stage-A classifier ablation: 20 epochs structural synth pretrain, then real finetune on the same split as Stage B."
