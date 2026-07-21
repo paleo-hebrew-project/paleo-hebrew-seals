@@ -7,11 +7,11 @@ task: classifier
 output_root: runs/paleo_experiments
 
 data:
-  val_manifest: notebooks/manifest_hebrew_unambiguous.jsonl
+  val_manifest: data/real/manifest.jsonl
   real_source_id: real
   sources:
     - id: real
-      path: notebooks/manifest_hebrew_unambiguous.jsonl
+      path: data/real/manifest.jsonl
 
 mixing:
   mode: single

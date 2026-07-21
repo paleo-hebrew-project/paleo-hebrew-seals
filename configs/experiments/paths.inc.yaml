@@ -1,10 +1,13 @@
-# Canonical manifest paths (Stage A / Stage B / real val). Include or copy into experiment YAMLs.
-# Stage A (structural render): runs/synthetic_v2_parallel_advanced_20260222/all_manifest.jsonl
-# Stage B (styled):            notebooks/syn_v2_styled_advanced_20260222/manifest.jsonl
-# Real (val / optional train): notebooks/manifest_hebrew_unambiguous.jsonl
+# Canonical manifest paths under data/.
+# Stage A (structural render): data/stage_a/manifest.jsonl
+# Stage B (styled):            data/stage_b/manifest.jsonl
+# Real:                        data/real/manifest.jsonl
 
 paths:
   project_root: .
-  real: notebooks/manifest_hebrew_unambiguous.jsonl
-  synth_stage_a: runs/synthetic_v2_parallel_advanced_20260222/all_manifest.jsonl
-  synth_stage_b: notebooks/syn_v2_styled_advanced_20260222/manifest.jsonl
+  real: data/real/manifest.jsonl
+  real_train: data/real/manifest_train.jsonl
+  real_val: data/real/manifest_val.jsonl
+  real_group_split: data/real/manifest_group_split.jsonl
+  synth_stage_a: data/stage_a/manifest.jsonl
+  synth_stage_b: data/stage_b/manifest.jsonl

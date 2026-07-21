@@ -5,7 +5,7 @@
 #   - Each phase is a separate Ultralytics run; the next phase loads weights/ best.pt from the
 #     previous run (best val fitness ~= mAP50-95 for detection).
 #   - Phase length is ONLY phases[].epochs; detector.epochs below is a documented fallback for
-#     non-sequential regimes (sum of phase epochs = 10 + 40).
+#     non-sequential regimes (sum of phase epochs = 10 + 90).
 #   - Per-phase train_overrides merge over detector.train_overrides (see schema / detector_train.py).
 
 experiment_name: det_sweep_seq_real_strongaug
@@ -15,17 +15,17 @@ output_root: runs/paleo_experiments
 
 data:
   # Use explicit val split (150 rows), not the full manifest.
-  val_manifest: notebooks/paleo_ocr_part2/yolo_22_from_val_split_singlecls/manifest_val.jsonl
+  val_manifest: data/real/manifest_val.jsonl
   real_source_id: real
   synth_stage_a_id: synth_stage_a
   synth_stage_b_id: synth_stage_b
   sources:
     - id: real
-      path: notebooks/paleo_ocr_part2/yolo_22_from_val_split_singlecls/manifest_train.jsonl
+      path: data/real/manifest_train.jsonl
     - id: synth_stage_a
-      path: runs/synthetic_v2_parallel_advanced_20260222/all_manifest.jsonl
+      path: data/stage_a/manifest.jsonl
     - id: synth_stage_b
-      path: notebooks/syn_v2_styled_advanced_20260222/manifest.jsonl
+      path: data/stage_b/manifest.jsonl
 
 mixing:
   mode: sequential

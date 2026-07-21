@@ -19,11 +19,11 @@ task: detector
 output_root: runs/paleo_experiments
 
 data:
-  val_manifest: notebooks/manifest_hebrew_unambiguous_group_split_rowid.jsonl
+  val_manifest: data/real/manifest_group_split.jsonl
   real_source_id: real
   sources:
     - id: real
-      path: notebooks/manifest_hebrew_unambiguous_group_split_rowid.jsonl
+      path: data/real/manifest_group_split.jsonl
 
 mixing:
   mode: single
