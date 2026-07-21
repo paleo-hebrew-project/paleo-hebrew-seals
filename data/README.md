@@ -1,55 +1,58 @@
-# Data
+# Data release layout
 
-The real benchmark images, the synthetic corpus (Stage A and Stage B), and the
-text lexicons used by the Stage A generator are distributed as a separate
-anonymized data supplement (the file sizes and provenance make them unsuitable
-for a code repository). Place the release under this `data/` directory, or
-symlink the manifests and image trees to the relative paths referenced by
-`configs/experiments/*.yaml`.
-
-## Expected layout (relative to repository root)
+Place the anonymized data release **directly under this `data/` directory**.
+YAML configs reference these paths only (no `notebooks/` or absolute paths).
 
 ```
-notebooks/manifest_hebrew_unambiguous.jsonl              # real benchmark manifest
-notebooks/manifest_hebrew_unambiguous_group_split_rowid.jsonl  # entry-disjoint split
-notebooks/paleo_ocr_part2/yolo_22_from_val_split_singlecls/manifest_train.jsonl
-notebooks/paleo_ocr_part2/yolo_22_from_val_split_singlecls/manifest_val.jsonl
-notebooks/syn_v2_styled_advanced_20260222/manifest.jsonl # Stage B manifest + images
-runs/synthetic_v2_parallel_advanced_20260222/all_manifest.jsonl  # Stage A manifest + images
-notebooks/paleo_ocr_texts_pack/                          # lexicons for Stage A generation
+data/
+├── real/
+│   ├── manifest.jsonl
+│   ├── manifest_train.jsonl
+│   ├── manifest_val.jsonl
+│   ├── manifest_group_split.jsonl
+│   └── images/                  # or paths inside manifests may be relative here
+├── stage_a/
+│   ├── manifest.jsonl
+│   └── images/
+├── stage_b/
+│   ├── manifest.jsonl
+│   └── images/
+├── lexicons/                    # Stage A text pack
+└── SHA256SUMS
 ```
 
-Each manifest is a JSONL file with one record per image, containing the image
-path, character sequence, character-level bounding boxes, synchronized text
-variants, split label, and (for real records) the catalog `row_id` grouping.
+## Verify
 
-## Real benchmark
+```bash
+python scripts/verify_data_release.py --root data --sha256
+```
 
-- 307 real seal photographs from 129 catalog entries.
-- 2,963 manually localized signs.
-- 157 train / 150 evaluation images (27 / 102 entries), entry-disjoint.
-- Character inventory: 22 Paleo-Hebrew letters (no distinct final forms).
+Checks: required files, record counts (307 / 157 / 150), entry-disjoint
+`row_id` between train and evaluation, optional group-split overlap, SHA-256.
 
-## Synthetic corpus
+## Mapping from legacy internal layout
 
-- 200,000 images total.
-- Stage A: structural, lexicon-aware, font-based renders with exact supervision.
-- Stage B: structure-preserving diffusion stylization of Stage A renders,
-  retaining the Stage A text and boxes.
-- Per-sample generation metadata (font, stroke width, blur, noise, taper,
-  depth-like perturbation, contrast, color enhancement) is stored alongside
-  each record.
+If you already have the project-internal trees, symlink:
 
-## Leakage control
+```bash
+mkdir -p data/real data/stage_a data/stage_b
+ln -sfn /path/to/manifest_hebrew_unambiguous.jsonl data/real/manifest.jsonl
+ln -sfn /path/to/yolo_22_from_val_split_singlecls/manifest_train.jsonl data/real/manifest_train.jsonl
+ln -sfn /path/to/yolo_22_from_val_split_singlecls/manifest_val.jsonl data/real/manifest_val.jsonl
+ln -sfn /path/to/manifest_hebrew_unambiguous_group_split_rowid.jsonl data/real/manifest_group_split.jsonl
+ln -sfn /path/to/synthetic_v2_parallel_advanced_20260222/all_manifest.jsonl data/stage_a/manifest.jsonl
+ln -sfn /path/to/syn_v2_styled_advanced_20260222/manifest.jsonl data/stage_b/manifest.jsonl
+```
 
-Stage B style-source manifests were audited against the evaluation image
-identifiers; no evaluation image is used as a style source. Group identifiers
-(`row_id`) expose multiple views of one artifact so entry-level overlap can be
-checked. The audit script and its output are included in the data supplement.
+Image paths inside manifests must still resolve (either rewrite paths in the
+JSONL records or keep image trees where the manifests point).
+
+## Leakage
+
+Stage B style sources must be disjoint from evaluation images at the catalog
+entry level. The audit script/output belongs in the data release.
 
 ## License
 
-Real images and synthetic outputs are released under CC-BY 4.0; generation
-code under MIT; fonts under their respective open-source licenses (SIL OFL,
-GPL with Font Exception). See the data release documentation for asset-level
-terms.
+Real images and synthetic outputs: typically CC-BY 4.0 (see release card).
+Fonts: SIL OFL / GPL with Font Exception. Code: MIT.
