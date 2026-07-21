@@ -1,123 +1,112 @@
-# PaleoHebrew-Seals: Reproducibility Supplement
+# PaleoHebrew-Seals: Code & Data Supplement (Anonymous)
 
 Anonymous reproducibility package for the submission
 **“Preserving Low-Resource Cultural Heritage with AI: A Dataset and Synthetic-to-Real Study of Paleo-Hebrew Seals.”**
 
-This repository contains the training, evaluation, and synthetic-generation code
-used to produce the detector, classifier, and OCR-transfer experiments reported
-in the paper. It is intentionally self-contained: the Python package, experiment
-configurations, sweep scripts, aggregation utilities, and the open-source
-Paleo-Hebrew fonts are all included. Real images, synthetic images, and text
-lexicons are distributed separately as a data release (see `data/README.md`) and
-are referenced by relative path from the repository root.
+This is a **code-and-data supplement** for the AAAI AISI track: YAML-driven
+detector and classifier sweeps, Stage A generation, the real Stage B diffusion
+stylization pipeline used to build the 200k corpus, OCR baselines, group-disjoint
+splitting, and frozen paper tables. It is intended to facilitate follow-up work.
 
-The codebase is organized so that every experiment is driven by a YAML
-configuration under `configs/experiments/`, launched by a sweep script under
-`scripts/`, and aggregated by utilities in `paleo_ocr/experiments/`. All paths in
-the configurations are relative to the repository root, so the same commands work
-on any machine after the data release is placed under `data/`.
+> **Evaluation split.** The 150-image real partition used in all tables is an
+> **evaluation / comparative validation split**. It participated in checkpoint
+> selection in parts of the project. It is **not** a sealed blind test set. The
+> same wording is used in the paper, table captions, and `results/run_manifest.json`.
 
-## What this repository covers
+## What is and is not reproducible from this repository
 
-- **Real benchmark + synthetic corpus handling.** Manifest builders, group-split
-  construction, and leakage-controlled train/evaluation splitting.
-- **Stage A generation.** Structural, lexicon-aware, font-based rendering of
-  Paleo-Hebrew inscriptions with exact character-level bounding boxes.
-- **Stage B generation.** Structure-preserving diffusion stylization that adapts
-  Stage A renders toward seal-like appearance while retaining the supervision.
-- **Detector study.** Seven architectures (YOLOv8-M/X, YOLO11-M/X, YOLO26-M/X,
-  RT-DETR-L) under four regimes: Stage A only (A), Stage A + real (A+R),
-  Stage A + Stage B + real (A+B+R), and real only (R).
-- **Classifier study.** Sixteen complete timm backbone sweeps under real-only
-  (R40), Stage A only (A), and A / A+B followed by 20, 60, or 120 real epochs.
-- **OCR transfer baselines.** Tesseract and Kraken Hebrew checkpoints evaluated
-  on the real benchmark to quantify the domain gap.
-- **Aggregation and evaluation.** Run aggregation, standalone detector and
-  classifier evaluation, end-to-end pipeline evaluation, and CER/WER metrics.
+| Component | Status |
+|-----------|--------|
+| Detector / classifier training & evaluation (A, A+R, B+R, R, R40) | Fully reproducible from YAML + scripts |
+| Stage A structural generator | Included (`paleo_ocr/synthetic_v_2_generator.py`) |
+| Stage B diffusion stylization (SD1.5 + ControlNet Canny + IP-Adapter) | Included (`scripts/style_adapt_sd15_controlnet_ip_multigpu.py`) — the script that produced the 200k corpus |
+| Classic CV stylization helper | Included (`paleo_ocr/style_adapt.py`); its `diffusion` mode is a **non-functional scaffold** and is **not** the Stage B corpus pipeline |
+| Frozen paper tables | Included under `results/` |
+| Real / Stage A / Stage B images | Distributed as a separate data release under `data/` (see `data/README.md`) |
+
+**Regime naming (aligned with code and paper):**
+
+| Code | Training meaning |
+|------|------------------|
+| `A` | Stage A structural synth only |
+| `A+R` | Stage A pretrain → real finetune |
+| `B+R` | Phase 0 on **Stage B styled images only** → real finetune. Stage B images are produced from Stage A. Paper shorthand: **A+B+R** (generation pipeline + real), **not** joint training on A and B together |
+| `R` / `R40` | Real only |
 
 ## Repository layout
 
 ```
 .
-├── paleo_ocr/                 # Python package
-│   ├── experiments/          # YAML-driven experiment orchestration + aggregation
-│   ├── train_detect.py        # Ultralytics detector training core
-│   ├── train_classify.py      # timm classifier training core
-│   ├── synthetic_v_2_generator.py  # Stage A structural generator
-│   ├── style_adapt.py         # Stage B style adaptation
-│   ├── dataset_manifest.py    # real manifest builder
-│   ├── build_group_split ...  # (in scripts/) entry-disjoint split builder
-│   ├── predict_*.py, extract_crops.py, ocr_*.py, end_2_end_infer.py
-│   └── paleo_labeler.py        # annotation interface
-├── configs/experiments/       # all sweep + single-regime YAMLs (relative paths)
-├── scripts/                   # parallel sweep launchers + aggregation
-├── fonts/                     # open-source Paleo-Hebrew TTF fonts (Stage A)
-├── data/                      # place the data release here (see data/README.md)
-├── REPRODUCIBILITY.md         # seeds, hyperparameters, hardware, regime definitions
-├── requirements.txt
-└── pyproject.toml
+├── paleo_ocr/                 # Python package (train, eval, Stage A, OCR)
+├── configs/experiments/       # YAML regimes (paths under data/)
+├── scripts/                   # sweeps, Stage B diffusion, verify, reproduce_tables
+├── fonts/                     # open-source Paleo-Hebrew TTFs (Stage A)
+├── data/                      # place the data release here
+├── results/                   # frozen tables matching the paper
+├── REPRODUCIBILITY.md
+├── SYSTEM_REQUIREMENTS.md
+├── REPRODUCE_TABLES.md
+└── ORIGIN.md                  # notebook lineage (Paleo_OCR.ipynb → YAML sweeps)
 ```
 
 ## Quick start
 
-1. **Create an environment and install dependencies.**
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -U pip
+pip install -r requirements.txt
+# CUDA torch/torchvision: see SYSTEM_REQUIREMENTS.md
 
-   ```bash
-   python -m venv .venv && source .venv/bin/activate
-   pip install -U pip
-   pip install -r requirements.txt
-   ```
+# Place the anonymized data release under data/ (see data/README.md), then:
+python scripts/verify_data_release.py --root data --sha256
 
-   For detector training install a CUDA build of PyTorch matching your driver,
-   e.g. `pip install torch --index-url https://download.pytorch.org/whl/cu124`.
+# Reproduce the published tables from frozen results:
+python scripts/reproduce_tables.py --output results
+```
 
-2. **Obtain the data release** and place it under `data/` (or symlink the
-   manifests/images to the relative paths listed in `configs/experiments/`).
-   See `data/README.md` for the expected layout.
+### Detector Stage A + real (one backbone)
 
-3. **Run a single detector regime** (Stage A + real, one backbone):
+```bash
+DETECTOR_GPUS="0" DETECTOR_MODELS="yolov8m.pt" \
+  bash scripts/run_parallel_detector_stagea_sweep.sh
+```
 
-   ```bash
-   DETECTOR_GPUS="0" \
-   DETECTOR_MODELS="yolov8m.pt" \
-     bash scripts/run_parallel_detector_stagea_sweep.sh
-   ```
+### Classifier Stage A + 120 real epochs
 
-4. **Run the classifier Stage A sweep** at a given real-finetune length:
+```bash
+CLASSIFIER_GPUS="0 1" CLASSIFIER_PHASE1_EPOCHS=120 \
+  bash scripts/run_parallel_classifier_stagea_backbones.sh
+```
 
-   ```bash
-   CLASSIFIER_GPUS="0 1" CLASSIFIER_PHASE1_EPOCHS=120 \
-     bash scripts/run_parallel_classifier_stagea_backbones.sh
-   ```
+### Stage B regeneration (optional; heavy)
 
-5. **Aggregate results:**
+```bash
+python scripts/style_adapt_sd15_controlnet_ip_multigpu.py --mode launcher \
+  --gpus 0,1,2,3,4,5,6,7 \
+  --in-syn data/stage_a \
+  --out data/stage_b_regen \
+  --extract-dir data/real/images \
+  --batch-size 128 --prompt-mode auto \
+  --controlnet-scale 0.70 --ip-scale 1.2 \
+  --guidance 6.0 --steps 20 --seed 123
+```
 
-   ```bash
-   bash scripts/aggregate_ultralytics_detect_runs.sh
-   python -m paleo_ocr.experiments.aggregate_runs
-   ```
+Default hyperparameters match the run that produced the 200k Stage B corpus
+(SD1.5, ControlNet Canny, IP-Adapter, 512², guidance 6, 20 steps). See
+`ORIGIN.md` and `SYSTEM_REQUIREMENTS.md`.
 
-See `REPRODUCIBILITY.md` for the full regime definitions, hyperparameters,
-seeds, checkpoint-selection rules, and the exact commands that reproduce each
-table in the paper.
+## Classifier grid (16 complete sweeps)
 
-## Regimes
+Included: ConvNeXt-T/S/B/L, EfficientNet-B0/B1/B2/B3-NS, ResNet-34/101,
+Swin-T/S/B, SwinV2-T, ViT-S/B.
 
-| Code    | Pretrain                 | Real fine-tune | Used for            |
-|---------|--------------------------|----------------|---------------------|
-| `A`     | Stage A (structural)     | —              | detector ablation   |
-| `A+R`   | Stage A                  | yes            | detector, classifier|
-| `A+B+R` | Stage A + Stage B        | yes            | detector, classifier|
-| `R`     | —                        | yes            | real-only reference |
-| `R40`   | —                        | 40 epochs      | classifier reference|
+Excluded from cross-architecture analysis (incomplete regime): ResNet-50,
+SwinV2-B, SwinV2-S.
 
 ## License
 
-Code is released under the MIT license. The Paleo-Hebrew fonts under `fonts/`
-are governed by their respective open-source licenses (SIL OFL and GPL with Font
-Exception); see the font files and the dataset documentation for terms. Real
-images and synthetic outputs carry the license terms documented in the data
-release, not a single blanket license.
+Code: MIT. Fonts under `fonts/`: SIL OFL / GPL with Font Exception. Real images
+and synthetic outputs: terms in the data release (typically CC-BY 4.0).
 
 ## AI-use disclosure
 

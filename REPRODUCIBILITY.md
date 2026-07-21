@@ -1,174 +1,131 @@
 # Reproducibility
 
-This document specifies the experimental regimes, hyperparameters, seeds,
-checkpoint-selection rules, hardware, and exact commands needed to reproduce the
-tables in the paper. All paths are relative to the repository root.
+## 1. Data layout
 
-## 1. Data
+All YAML configs resolve manifests under `data/`:
 
-Place the data release under `data/` so that the relative manifest paths in
-`configs/experiments/*.yaml` resolve. The expected layout is documented in
-`data/README.md`. The three source manifests are:
-
-| Source id     | Relative path                                              | Role            |
-|---------------|------------------------------------------------------------|-----------------|
-| `real`        | `notebooks/manifest_hebrew_unambiguous.jsonl`              | real benchmark  |
-| `synth_stage_a` | `runs/synthetic_v2_parallel_advanced_20260222/all_manifest.jsonl` | Stage A renders |
-| `synth_stage_b` | `notebooks/syn_v2_styled_advanced_20260222/manifest.jsonl`        | Stage B styled  |
-
-The entry-disjoint group split used for the headline detector and classifier
-tables is built deterministically by:
-
-```bash
-python scripts/build_group_split_manifest.py
+```
+data/
+├── real/
+│   ├── manifest.jsonl              # 307 real images
+│   ├── manifest_train.jsonl        # detector train split
+│   ├── manifest_val.jsonl          # evaluation split (150)
+│   ├── manifest_group_split.jsonl  # entry-disjoint group split
+│   └── images/
+├── stage_a/
+│   ├── manifest.jsonl
+│   └── images/
+├── stage_b/
+│   ├── manifest.jsonl
+│   └── images/
+├── lexicons/                       # Stage A text resources
+└── SHA256SUMS
 ```
 
-## 2. Regimes
+```bash
+python scripts/verify_data_release.py --root data --sha256
+```
 
-| Code    | Phase 0 (pretrain)            | Phase 1 (real fine-tune) | Sweep base YAML                                  |
-|---------|-------------------------------|--------------------------|--------------------------------------------------|
-| `A`     | Stage A, 10 ep (detector) / 20 ep (classifier) | none        | `sweep_*_stagea_base.yaml`                       |
-| `A+R`   | Stage A                       | real, 90 ep (det) / 20,60,120 (cls) | `sweep_*_stagea_base.yaml`               |
-| `A+B+R` | Stage A + Stage B             | real, 90 ep (det) / 20,60,120 (cls) | `sweep_*_stageb_base.yaml`               |
-| `R`     | none                          | real, 100 ep (det) / 40 ep (cls) | `sweep_*_real_only_*.yaml`                  |
-| `R40`   | none                          | real, 40 ep (cls)         | `sweep_classifier_real_only_40e_base.yaml`       |
+## 2. Regime naming
 
-The `A+R` real-finetune length for classifiers is controlled by
-`CLASSIFIER_PHASE1_EPOCHS` (20, 60, or 120); the experiment directory is
-suffixed `__real{N}e` so the regimes coexist on disk.
+| Code | Phase 0 | Phase 1 | Notes |
+|------|---------|---------|-------|
+| `A` | Stage A | — | structural synth only |
+| `A+R` | Stage A | real | |
+| `B+R` | **Stage B only** | real | Stage B images are derived from Stage A. Paper shorthand: **A+B+R**. Not joint A∪B training. |
+| `R` | — | real 100e (det) | |
+| `R40` | — | real 40e (cls) | |
+
+Detector Stage B sequential: **10 + 90** epochs (not 10+40).
+Classifier Stage B sequential: **20 + 120** epochs (override real length with `CLASSIFIER_PHASE1_EPOCHS`).
 
 ## 3. Hyperparameters
 
-### Detector (Ultralytics)
+### Detector
 
-| Parameter        | Value                                  |
-|------------------|----------------------------------------|
-| Image size       | 640                                    |
-| Optimizer        | AdamW, cosine LR                       |
-| Phase-0 LR       | 0.005                                  |
-| Phase-1 LR       | 0.005                                  |
-| Phase-0 epochs    | 10 (Stage A)                           |
-| Phase-1 epochs    | 90 (real fine-tune) / 100 (real only)  |
-| Early stopping   | patience 15 (phase 1)                  |
-| Close mosaic     | last 10 (phase 0), last 50 (phase 1)   |
-| Augmentation     | mosaic 0.4, fliplr 0.35, degrees 3, scale 0.4, shear 2, randaugment |
-| Batch size       | 128 default; **32 for YOLOv8-X and YOLO26-X** (OOM-safe) |
-| Seed             | 42                                     |
-| Single class     | true                                   |
-| Shared cache     | `runs/paleo_experiments/_shared_yolo_cache` (or `DETECTOR_SHARED_CACHE_ROOT`) |
+| Parameter | Value |
+|-----------|-------|
+| imgsz | 640 |
+| optimizer | AdamW, cosine |
+| phase LR | 0.005 |
+| Stage A / B pretrain | 10e |
+| real finetune | 90e (patience 15) |
+| real only | 100e |
+| batch | 128; **32 for YOLOv8-X / YOLO26-X** |
+| seed | 42 |
+| aug | mosaic 0.4, fliplr 0.35, degrees 3, scale 0.4, shear 2, randaugment |
 
-For large backbones that exceed 80 GB at `batch=128`, pass
-`DETECTOR_BATCH=32` and `PYTORCH_ALLOC_CONF=expandable_segments:True`.
+### Classifier
 
-### Classifier (timm)
-
-| Parameter        | Value (224 backbones)   | Value (SwinV2 @256)   |
-|------------------|-------------------------|------------------------|
-| Image size       | 224                     | 256                    |
-| Batch size       | 256                     | 256                    |
-| Optimizer        | AdamW                   | AdamW                  |
-| Phase-0 LR       | 0.0003                  | 0.0003                 |
-| Phase-1 LR       | 0.0001                  | 0.0001                 |
-| Weight decay      | 0.05                    | 0.05                   |
-| Label smoothing  | 0.05                    | 0.05                   |
-| Warmup           | 1 epoch                 | 1 epoch                |
-| Schedule         | cosine                  | cosine                 |
-| Freeze backbone  | 1 epoch                 | 1 epoch                |
-| AMP              | true                    | true                   |
-| Phase-0 epochs   | 20 (Stage A)            | 20 (Stage A)           |
-| Phase-1 epochs   | 20 / 60 / 120           | 20 / 60 / 120          |
-| Real-only epochs | 40                      | 40                     |
-| Seed             | 42                      | 42                     |
-| Best metric      | val_acc1                | val_acc1               |
+| Parameter | 224 backbones | SwinV2 @256 |
+|-----------|---------------|-------------|
+| imgsz / batch | 224 / 256 | 256 / 256 |
+| phase-0 / phase-1 LR | 3e-4 / 1e-4 | same |
+| wd / label smooth | 0.05 / 0.05 | same |
+| freeze / warmup | 1e / 1e | same |
+| Stage A/B pretrain | 20e | 20e |
+| real finetune | 20 / 60 / 120 | same |
+| R40 | 40e | 40e |
+| seed | 42 | 42 |
+| best metric | val_acc1 | val_acc1 |
 
 ## 4. Model grids
 
-- **Detectors (paper profile):** `yolov8m.pt yolov8x.pt yolo11m.pt yolo11x.pt
-  yolo26m.pt yolo26x.pt rtdetr-l.pt`.
-- **Classifiers (16 complete sweeps):** ConvNeXt-T/S/B/L, EfficientNet-B0/B1/B2
-  + tf_efficientnet_b3_ns, ResNet-34/101, Swin-T/S/B (W7-224), SwinV2-T/S
-  (W8-256), ViT-S/B (16, 224). ResNet-50, SwinV2-B, and SwinV2-S are omitted from
-  the cross-architecture analysis because at least one regime is incomplete.
+**Detectors:** YOLOv8-M/X, YOLO11-M/X, YOLO26-M/X, RT-DETR-L.
 
-## 5. Checkpoint selection
+**Classifiers (16 complete sweeps):** ConvNeXt-T/S/B/L; EfficientNet-B0/B1/B2/B3-NS;
+ResNet-34/101; Swin-T/S/B; SwinV2-T; ViT-S/B.
 
-Each reported row uses the **best** checkpoint by the regime's validation
-metric (`mAP50-95` for detectors, `val_acc1` for classifiers). The evaluation
-split participated in checkpoint selection in parts of the project, so the
-results are comparative validation results rather than a blind test; this is
-stated in the paper.
+**Excluded:** ResNet-50; SwinV2-B; SwinV2-S (incomplete regimes).
 
-## 6. Hardware
+## 5. Checkpoint selection & evaluation split
 
-- 6 × NVIDIA H100 80 GB, 1.1 TB RAM.
-- One job per GPU; the sweep scripts queue models across GPUs.
-- Detector shared YOLO export cache on local storage (`/tmp` or
-  `DETECTOR_SHARED_CACHE_ROOT`) when the project lives on a slow network share.
+Best checkpoint by validation metric (`mAP50-95` / `val_acc1`).
+The 150-image partition is an **evaluation / comparative validation split**,
+not a sealed test set (see paper, README, `results/run_manifest.json`).
 
-## 7. Commands to reproduce the paper tables
+## 6. Seeds and variation
 
-### Detector table (Table 2 in the paper)
+All published runs used **seed=42**, **one run per configuration**.
+Seed-induced variance was **not** estimated for the full grid. For the
+camera-ready / checklist we recommend:
 
-```bash
-# A+R  (Stage A + real)
-DETECTOR_GPUS="0 1 2 3 4 5" \
-  bash scripts/run_parallel_detector_stagea_sweep.sh
+- 3 seeds for 2–3 representative detector families;
+- 3 seeds for 3 classifier families;
+- bootstrap CIs clustered by `row_id`;
+- for the remainder, state one run per configuration explicitly.
 
-# A+B+R (Stage A + Stage B + real)
-DETECTOR_GPUS="0 1 2 3 4 5" \
-  bash scripts/run_parallel_detector_sweep.sh
+## 7. Stage B generation
 
-# R   (real only)
-DETECTOR_GPUS="0 1 2 3 4 5" \
-  bash scripts/run_parallel_detector_sweep_real_only.sh
-DETECTOR_GPUS="0 1 2 3 4 5" \
-  bash scripts/run_parallel_detector_sweep_real_only_non_yolo.sh
-```
+Real pipeline: `scripts/style_adapt_sd15_controlnet_ip_multigpu.py`
+(SD1.5 + ControlNet Canny + IP-Adapter). Corpus hyperparameters are documented
+in `SYSTEM_REQUIREMENTS.md` and `ORIGIN.md`.
+`paleo_ocr/style_adapt.py` diffusion mode is a non-functional scaffold.
 
-For YOLOv8-X / YOLO26-X add `DETECTOR_BATCH=32` and
-`PYTORCH_ALLOC_CONF=expandable_segments:True`.
-
-### Classifier table (Table 3 in the paper)
+## 8. Reproduce paper tables
 
 ```bash
-for N in 20 60 120; do
-  CLASSIFIER_GPUS="0 1 2 3 4 5" CLASSIFIER_PHASE1_EPOCHS=$N \
-    bash scripts/run_parallel_classifier_stagea_backbones.sh
-  CLASSIFIER_GPUS="0 1 2 3 4 5" CLASSIFIER_PHASE1_EPOCHS=$N \
-    bash scripts/run_parallel_classifier_backbones.sh
-done
-
-# R40 (real only reference)
-CLASSIFIER_GPUS="0 1 2 3 4 5" \
-  bash scripts/run_parallel_classifier_backbones_real_only_40e.sh
+python scripts/reproduce_tables.py --output results
+# -> results/table_detector.csv
+# -> results/table_classifier.csv
+# -> results/ocr_baselines.csv
+# -> results/run_manifest.json
 ```
 
-### Aggregation
+Live aggregation after training:
 
 ```bash
-bash scripts/aggregate_ultralytics_detect_runs.sh     # detector runs -> CSV
-python -m paleo_ocr.experiments.aggregate_runs          # all runs -> runs_summary.csv
-python -m paleo_ocr.experiments.compare_runs           # sort / top-k
+bash scripts/aggregate_ultralytics_detect_runs.sh
+python -m paleo_ocr.experiments.aggregate_runs --root runs/paleo_experiments --out-csv results/runs_summary.csv
 ```
 
-### OCR transfer baselines
+The aggregator reads `classifier_run/phase_*/metrics_best.json` (last phase)
+as well as the legacy flat layout.
 
-```bash
-python -m paleo_ocr.paleo_ocr_baseline --manifest notebooks/manifest_hebrew_unambiguous.jsonl \
-    --engines tesseract_heb kraken_midrash kraken_biblia kraken_ashkenazi \
-              kraken_italian kraken_sephardi
-```
+## 9. AAAI reproducibility checklist notes
 
-## 8. Reproducibility checklist (for the submission system)
-
-- **Code:** this repository (anonymized).
-- **Data:** real benchmark and synthetic corpus are provided as an anonymized
-  data supplement; manifests and split files are included.
-- **Seeds:** all experiments use `seed: 42` (config).
-- **Hyperparameters:** fully specified in the YAMLs and in §3 above.
-- **Checkpoint selection:** best by validation metric (§5).
-- **Hardware:** specified in §6.
-- **Runtime:** detector phase-1 ≈ 0.02–0.05 h/epoch on H100; classifier 20 ep
-  Stage A + 120 ep real ≈ a few hours per backbone on one H100.
-- **Expected results:** detector mAP50-95 and classifier Acc1/macro-F1 match
-  Tables 2–3 of the paper within seed-induced variance.
+- Code: this repository (anonymized ZIP for OpenReview).
+- Data: anonymized release under `data/` + SHA-256.
+- Seeds / hypers / hardware: this document + YAMLs.
+- Runs per result: 1 (seed 42); variation not estimated for full grid.
+- Evaluation split role: comparative validation (not blind test).

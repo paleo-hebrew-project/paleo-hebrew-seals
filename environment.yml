@@ -1,0 +1,13 @@
+name: paleo-hebrew-seals
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - -r requirements.txt
+# Install a CUDA build of torch/torchvision separately, e.g.:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+# System packages (not conda): tesseract-ocr, tesseract-ocr-heb
