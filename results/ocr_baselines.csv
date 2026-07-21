@@ -1,0 +1,7 @@
+method,CER,WER,chrF,EM
+Tesseract (heb),3.4,7.029,1.817,0.0
+Kraken MiDRASH_Gen_01,2.832,5.294,1.811,0.0
+Kraken BiblIA_01,2.634,4.568,1.046,0.0
+Kraken Ashkenazi_01,1.209,1.784,0.865,0.0
+Kraken Italian_01,1.186,1.767,1.049,0.0
+Kraken Sephardi_01,1.673,2.878,1.225,0.0

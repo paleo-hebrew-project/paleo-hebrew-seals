@@ -1,0 +1,23 @@
+{
+  "split_name": "evaluation_split",
+  "split_role": "comparative validation / evaluation split; participated in checkpoint selection; NOT a sealed blind test set",
+  "n_real_images": 307,
+  "n_evaluation_images": 150,
+  "n_train_images": 157,
+  "seed": 42,
+  "n_classifier_complete_sweeps": 16,
+  "excluded_classifier_backbones": [
+    "ResNet-50 (incomplete regime)",
+    "SwinV2-B (incomplete / unavailable timm name in env)",
+    "SwinV2-S (incomplete regime)"
+  ],
+  "regime_naming": {
+    "A": "Stage A structural synth only",
+    "A+R": "Stage A pretrain then real finetune",
+    "B+R": "Phase 0 trains on Stage B styled images only, then real finetune. Stage B images are produced from Stage A. Paper shorthand: A+B+R.",
+    "R": "real only",
+    "R40": "real only, 40 epochs (classifier reference)"
+  },
+  "runs_per_configuration": 1,
+  "variation": "Single seed (42). Seed-induced variance was not estimated for the full grid; a small multi-seed subset is recommended for the camera-ready."
+}

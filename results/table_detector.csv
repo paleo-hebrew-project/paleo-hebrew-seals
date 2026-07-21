@@ -1,0 +1,8 @@
+model,A_mAP50_95,AplusR_mAP50_95,BplusR_mAP50_95,R_mAP50_95,delta_BplusR_minus_R,note
+YOLOv8-M,0.091,0.101,0.599,0.499,0.1,B+R = Phase0 on Stage-B styled images then real finetune; Stage B images are derived from Stage A. Paper shorthand A+B+R.
+YOLOv8-X,0.094,0.513,0.132,0.182,-0.05,B+R = Phase0 on Stage-B styled images then real finetune; Stage B images are derived from Stage A. Paper shorthand A+B+R.
+YOLO11-M,0.073,0.091,0.587,0.344,0.243,B+R = Phase0 on Stage-B styled images then real finetune; Stage B images are derived from Stage A. Paper shorthand A+B+R.
+YOLO11-X,0.076,0.097,0.589,0.205,0.384,B+R = Phase0 on Stage-B styled images then real finetune; Stage B images are derived from Stage A. Paper shorthand A+B+R.
+YOLO26-M,0.094,0.524,0.587,0.533,0.054,B+R = Phase0 on Stage-B styled images then real finetune; Stage B images are derived from Stage A. Paper shorthand A+B+R.
+YOLO26-X,0.071,0.238,0.404,0.511,-0.107,B+R = Phase0 on Stage-B styled images then real finetune; Stage B images are derived from Stage A. Paper shorthand A+B+R.
+RT-DETR-L,0.028,0.031,0.45,0.01,0.44,B+R = Phase0 on Stage-B styled images then real finetune; Stage B images are derived from Stage A. Paper shorthand A+B+R.
